@@ -135,7 +135,7 @@ async def process_task(client, message, task_key, password):
             # For split archives, use a shared directory based on ChatID + BaseName
             # We sanitize the base name to avoid path issues
             safe_base = "".join([c for c in base_name if c.isalpha() or c.isdigit() or c==' ' or c=='.']).strip()
-            unique_dir = os.path.join(Config.DOWNLOAD_LOCATION, f"{chat_id}_{safe_base}")
+            unique_dir = os.path.join(Config.DOWNLOAD_LOCATION, f"{message.chat.id}_{safe_base}")
             
             if part_number != 1:
                 is_first_part = False
