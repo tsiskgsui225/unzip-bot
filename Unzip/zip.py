@@ -118,28 +118,6 @@ async def process_task(client, message, task_key, password):
         
         # Default: Single file logic
         unique_dir = os.path.join(Config.DOWNLOAD_LOCATION, f"{task_key[0]}_{task_key[1]}")
-        is_split_archive = False
-        is_first_part = True
-        
-        # Regex for split archives (e.g. name.part01.rar, name.part1.rar)
-        # We also need to handle .001, .002 if supported, but .partN.rar is most common for unrar
-        import re
-        # Match patterns like: name.part01.rar, name.part1.rar
-        split_match = re.search(r'(.+)\.part(\d+)\.rar$', document.file_name, re.IGNORECASE)
-        
-        if split_match:
-            is_split_archive = True
-            base_name = split_match.group(1)
-            part_number = int(split_match.group(2))
-            
-            # For split archives, use a shared directory based on ChatID + BaseName
-            # We sanitize the base name to avoid path issues
-            safe_base = "".join([c for c in base_name if c.isalpha() or c.isdigit() or c==' ' or c=='.']).strip()
-            unique_dir = os.path.join(Config.DOWNLOAD_LOCATION, f"{message.chat.id}_{safe_base}")
-            
-            if part_number != 1:
-                is_first_part = False
-
         os.makedirs(unique_dir, exist_ok=True)
         
         if task_key in active_tasks:
@@ -157,45 +135,14 @@ async def process_task(client, message, task_key, password):
              # Cancelled during download
              if os.path.exists(file_path):
                  os.remove(file_path)
-             # Only remove dir if it's NOT a split archive shared folder (or check if empty)
-             if not is_split_archive and os.path.exists(unique_dir):
+             if os.path.exists(unique_dir):
                  try:
                      shutil.rmtree(unique_dir)
                  except:
                      pass
              return
 
-        # Processing Logic
-        if is_split_archive:
-            if not is_first_part:
-                 # Just save it and finish
-                 await download_message.edit(f"💾 **Part Saved**\n\nFile `{document.file_name}` saved.\nWaiting for Part 1 to trigger extraction.")
-                 active_tasks.pop(task_key, None)
-                 return
-            else:
-                 # It is Part 1. Check if other parts are still downloading.
-                 # We assume siblings share the exact same unique_dir.
-                 await download_message.edit("⏳ **Waiting for other parts...**\n\nChecking if other volumes are still downloading.")
-                 
-                 wait_start = time.time()
-                 while True:
-                     # Check if any OTHER task has the same unique_dir
-                     siblings_downloading = False
-                     for k, v in active_tasks.items():
-                         if k != task_key and v.get('unique_dir') == unique_dir:
-                             siblings_downloading = True
-                             break
-                     
-                     if not siblings_downloading:
-                         break
-                     
-                     if time.time() - wait_start > 600: # 10 minute timeout
-                         await download_message.edit("⚠️ **Timeout**\n\nSome parts took too long. Attempting extraction anyway...")
-                         break
-                         
-                     await asyncio.sleep(3)
-
-        # Proceed to extraction (Single file OR Part 1 of split)
+        # Proceed to extraction
         await start_extraction(client, message, task_key, file_path, download_message, start, password)
         
     except Exception as e:
@@ -241,11 +188,22 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
         try:
              await asyncio.to_thread(patoolib.extract_archive, file_path, outdir=extract_dir, password=password)
         except patoolib.util.PatoolError as e:
-             if password is None:
-                  await download_message.edit(f"❌ Extraction Failed. File might be password protected, but you skipped it.\nError: {e}")
+             # Check if any files were extracted (Partial Success)
+             files_found = False
+             for _, _, files in os.walk(extract_dir):
+                 if files:
+                     files_found = True
+                     break
+             
+             if files_found:
+                 await download_message.edit(f"⚠️ **Extraction Warning**\n\nThe archive contained errors (CRC/Corrupt), but some files were recovered.\nProceeding with available files...")
+                 # Allow execution to continue below
              else:
-                  await download_message.edit(f"❌ Extraction Failed. Incorrect password or error.\nError: {e}")
-             return
+                 if password is None:
+                      await download_message.edit(f"❌ Extraction Failed. File might be password protected, but you skipped it.\nError: {e}")
+                 else:
+                      await download_message.edit(f"❌ Extraction Failed. Incorrect password or error.\nError: {e}")
+                 return
         except Exception as e:
             await download_message.edit(f"❌ Failed to extract: {e}")
             return
