@@ -166,14 +166,34 @@ async def process_task(client, message, task_key, password):
              return
 
         # Processing Logic
-        if is_split_archive and not is_first_part:
-             # Just save it and finish
-             await download_message.edit(f"💾 **Part Saved**\n\nFile `{document.file_name}` saved.\nWaiting for Part 1 to trigger extraction.")
-             # We do not verify strict "completion" here as we are stateless. 
-             # We rely on Part 1 to find this file later.
-             # Remove task from active but KEEP THE FILE
-             active_tasks.pop(task_key, None)
-             return
+        if is_split_archive:
+            if not is_first_part:
+                 # Just save it and finish
+                 await download_message.edit(f"💾 **Part Saved**\n\nFile `{document.file_name}` saved.\nWaiting for Part 1 to trigger extraction.")
+                 active_tasks.pop(task_key, None)
+                 return
+            else:
+                 # It is Part 1. Check if other parts are still downloading.
+                 # We assume siblings share the exact same unique_dir.
+                 await download_message.edit("⏳ **Waiting for other parts...**\n\nChecking if other volumes are still downloading.")
+                 
+                 wait_start = time.time()
+                 while True:
+                     # Check if any OTHER task has the same unique_dir
+                     siblings_downloading = False
+                     for k, v in active_tasks.items():
+                         if k != task_key and v.get('unique_dir') == unique_dir:
+                             siblings_downloading = True
+                             break
+                     
+                     if not siblings_downloading:
+                         break
+                     
+                     if time.time() - wait_start > 600: # 10 minute timeout
+                         await download_message.edit("⚠️ **Timeout**\n\nSome parts took too long. Attempting extraction anyway...")
+                         break
+                         
+                     await asyncio.sleep(3)
 
         # Proceed to extraction (Single file OR Part 1 of split)
         await start_extraction(client, message, task_key, file_path, download_message, start, password)
@@ -364,11 +384,13 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
         # Ideally, we only delete if we created a truly unique dir, OR if we are sure we are done.
         # For this implementation, we will rely on periodic cleanup or manual maintenance for shared folders,
         # OR we check if the folder is empty.
-        unique_dir = task_info.get('unique_dir')
+        task_info = active_tasks.get(task_key)
+        unique_dir = task_info.get('unique_dir') if task_info else None
+        
         if unique_dir and os.path.exists(unique_dir):
             try:
                 # If it was a standard unique task (numbers), delete it safely
-                if f"{task_info['chat_id']}_{task_info['message_id']}" in unique_dir:
+                if task_info and f"{task_info['chat_id']}_{task_info['message_id']}" in unique_dir:
                      shutil.rmtree(unique_dir)
                 # If it looks like a shared split-archive folder, maybe leave it? 
                 # Or check if we are the extracting task (Part 1). 
