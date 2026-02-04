@@ -36,6 +36,13 @@ async def cancel(client, callback_query):
                     await callback_query.message.edit("❌ Unzipping cancelled by user.")
                 except:
                     pass
+                
+                # Cleanup password prompt if it exists (e.g. cancelled before download started)
+                if 'password_prompt_id' in task_info:
+                    try:
+                        await client.delete_messages(chat_id, task_info['password_prompt_id'])
+                    except:
+                        pass
             else:
                 await callback_query.answer("⚠️ Task not found or already completed", show_alert=True)
                 # If stray message, delete it
@@ -83,10 +90,18 @@ async def cancel_command_handler(client, message):
              await message.reply("⛔ Unzipping has been cancelled.")
              
              # Try to update the original download message too
-             try:
-                 await task_info['download_message'].edit("❌ Unzipping cancelled by user.")
-             except:
-                 pass
+             if 'download_message' in task_info:
+                 try:
+                     await task_info['download_message'].edit("❌ Unzipping cancelled by user.")
+                 except:
+                     pass
+             
+             # Cleanup password prompt if it exists
+             if 'password_prompt_id' in task_info:
+                 try:
+                     await client.delete_messages(message.chat.id, task_info['password_prompt_id'])
+                 except:
+                     pass
         else:
             await message.reply("⚠️ Valid task not found for this ID.")
 

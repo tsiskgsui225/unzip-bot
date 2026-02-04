@@ -1,5 +1,5 @@
 import asyncio
-# Explicitly create and set the event loop before any imports that might use it
+
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
@@ -7,9 +7,7 @@ from pyrogram import idle, Client
 from Unzip.config import Config
 import logging
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
-# Suppress pyrogram's flood wait info logs (only show warnings/errors)
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
 
 app = Client(
@@ -19,7 +17,8 @@ app = Client(
     api_hash=Config.API_HASH,
     plugins=dict(root="Unzip"),
     workers=50,
-    sleep_threshold=10
+    sleep_threshold=10,
+    max_concurrent_transmissions=50
 )
 
 async def main():

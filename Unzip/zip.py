@@ -32,10 +32,8 @@ async def handle_file(client, message):
     if not file_name.endswith(SUPPORTED_FORMATS):
         return await message.reply("⚠️ Unsupported file format.")
 
-    # Generate short random cancel ID
     cancel_id = ''.join(random.choices(string.ascii_letters + string.digits, k=5))
 
-    # Ask for password immediately
     password_msg = await message.reply(
         "🔐 **Does this file have a password?**\n\n"
         "If YES: Send the password.\n"
@@ -50,8 +48,8 @@ async def handle_file(client, message):
         'message_id': message_id,
         'cancel_id': cancel_id,
         'password_prompt_id': password_msg.id,
-        'document': document,  # Store document info to use later
-        'original_message': message # Store original message object for download binding
+        'document': document,
+        'original_message': message 
     }
 
 
@@ -60,44 +58,37 @@ async def password_handler(client, message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     
-    # Find ANY task waiting for this user's password in this chat
     found_key = None
     
-    # We prioritize the most recent task if multiple are waiting
     candidates = []
     for key, info in active_tasks.items():
         if info.get('chat_id') == chat_id and info.get('status') == 'waiting_password':
             candidates.append(key)
     
     if not candidates:
-        return # No tasks waiting for password
+        return
 
-    # Sort by message_id (assuming higher id = newer)
     candidates.sort(key=lambda k: k[1], reverse=True)
-    found_key = candidates[0] # Pick the most recent one
+    found_key = candidates[0]
 
             
     if found_key:
         text = message.text
         task_info = active_tasks[found_key]
         
-        # Determine password
         password = None
         if text.strip().startswith("/skip"):
             password = None
         else:
             password = text.strip()
 
-        # Update state to downloading
         active_tasks[found_key]['status'] = 'downloading'
         
-        # Cleanup user password message
         try:
              await message.delete() 
         except:
              pass
         
-        # Cleanup prompt message
         prompt_id = task_info.get('password_prompt_id')
         if prompt_id:
             try:
@@ -105,7 +96,7 @@ async def password_handler(client, message):
             except:
                 pass
             
-        await process_task(client, task_info['original_message'], found_key, password)
+        asyncio.create_task(process_task(client, task_info['original_message'], found_key, password))
 
 
 async def process_task(client, message, task_key, password):
@@ -125,8 +116,15 @@ async def process_task(client, message, task_key, password):
         
         start = time.time()
         
+        # Create unique download directory
+        unique_dir = os.path.join(Config.DOWNLOAD_LOCATION, f"{task_key[0]}_{task_key[1]}")
+        os.makedirs(unique_dir, exist_ok=True)
+        
+        if task_key in active_tasks:
+            active_tasks[task_key]['unique_dir'] = unique_dir
+        
         file_path = await message.download(
-            file_name=os.path.join(Config.DOWNLOAD_LOCATION, document.file_name),
+            file_name=os.path.join(unique_dir, document.file_name),
             progress=progress_for_pyrogram,
             progress_args=("⬇️ Downloading...", download_message, start, task_key, cancel_id)
         )
@@ -137,6 +135,11 @@ async def process_task(client, message, task_key, password):
              # Cancelled during download
              if os.path.exists(file_path):
                  os.remove(file_path)
+             if os.path.exists(unique_dir):
+                 try:
+                     shutil.rmtree(unique_dir)
+                 except:
+                     pass
              return
 
         # Proceed directly to extraction with the provided password (or None)
@@ -183,7 +186,7 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
     try:
         # Try extracting with the provided password (or None)
         try:
-             patoolib.extract_archive(file_path, outdir=extract_dir, password=password)
+             await asyncio.to_thread(patoolib.extract_archive, file_path, outdir=extract_dir, password=password)
         except patoolib.util.PatoolError as e:
              if password is None:
                   await download_message.edit(f"❌ Extraction Failed. File might be password protected, but you skipped it.\nError: {e}")
@@ -323,9 +326,10 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
             except Exception as e:
                 print(f"Error deleting extracted dir: {e}")
         
-        # Cleanup downloaded file
-        if file_path and os.path.exists(file_path):
+        # Cleanup unique download directory
+        unique_dir = task_info.get('unique_dir')
+        if unique_dir and os.path.exists(unique_dir):
             try:
-                os.remove(file_path)
+                shutil.rmtree(unique_dir)
             except Exception as e:
-                print(f"Error deleting file path: {e}")
+                print(f"Error deleting unique dir: {e}")
