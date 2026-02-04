@@ -39,8 +39,8 @@ async def handle_file(client, message):
     password_msg = await message.reply(
         "🔐 **Does this file have a password?**\n\n"
         "If YES: Send the password.\n"
-        "If NO: Send `/skip` to proceed.\n"
-        f"(Cancel task: `/c_{cancel_id}`)",
+        "If NO: Send /skip to proceed.\n"
+        f"(Cancel task: /c_{cancel_id})",
         quote=True
     )
     
@@ -118,7 +118,7 @@ async def process_task(client, message, task_key, password):
     
     try:
         download_message = await message.reply(
-            f"⏳ Downloading your file...\nUse `/c_{cancel_id}` to cancel.", 
+            f"⏳ Downloading your file...\nUse /c_{cancel_id} to cancel.", 
             quote=True
         )
         task_info['download_message'] = download_message

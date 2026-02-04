@@ -47,7 +47,7 @@ async def progress_for_pyrogram(current, total, ud_type, message, start, task_ke
     )
     
     if cancel_id:
-        tmp += f"\nUse `/c_{cancel_id}` to cancel this task."
+        tmp += f"\nUse /c_{cancel_id} to cancel this task."
     
     cancel_callback = "cancel_unzip"
     if task_key:
