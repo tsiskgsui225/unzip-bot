@@ -338,23 +338,12 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
                 print(f"Error deleting extracted dir: {e}")
         
         # Cleanup unique download directory
-        # Be careful with split archives - cleaning up might delete other parts if we are hasty.
-        # Ideally, we only delete if we created a truly unique dir, OR if we are sure we are done.
-        # For this implementation, we will rely on periodic cleanup or manual maintenance for shared folders,
-        # OR we check if the folder is empty.
         task_info = active_tasks.get(task_key)
         unique_dir = task_info.get('unique_dir') if task_info else None
         
         if unique_dir and os.path.exists(unique_dir):
             try:
-                # If it was a standard unique task (numbers), delete it safely
                 if task_info and f"{task_info['chat_id']}_{task_info['message_id']}" in unique_dir:
                      shutil.rmtree(unique_dir)
-                # If it looks like a shared split-archive folder, maybe leave it? 
-                # Or check if we are the extracting task (Part 1). 
-                # If Part 1 finishes, it consumes the archive, so we MIGHT be able to delete the folder?
-                # But patool might leave parts behind. 
-                # Let's delete ONLY if we successfully extracted (which implies we utilized the files).
-                # To be safe: Only delete if empty or if we are the 'driver' (Part 1) and we finished.
             except Exception as e:
                 print(f"Error deleting unique dir: {e}")
