@@ -199,8 +199,10 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
         if task_key not in active_tasks:
              return
 
+        files_count = 0
         for root, _, files in os.walk(extract_dir):
             for file_name in files:
+                files_count += 1
                 
                 if task_key not in active_tasks:
                     return
@@ -289,7 +291,18 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
                     except:
                         pass 
 
-        await download_message.edit("✅ All files have been extracted and sent.")
+        # Calculate summary stats
+        end_time = time.time()
+        time_taken = end_time - start
+        minutes = int(time_taken // 60)
+        seconds = int(time_taken % 60)
+        time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
+        
+        await download_message.edit(
+            f"✅ **Upload Completed**\n\n"
+            f"📂 **Total Files**: `{files_count}`\n"
+            f"⏱ **Time Taken**: `{time_str}`"
+        )
 
     except Exception as e:
         await download_message.edit(f"❌ Error during processing: {e}")
