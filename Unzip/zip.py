@@ -212,11 +212,15 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
                 if task_key not in active_tasks:
                      return
 
-                # Detect if video
+                # Detect media type
                 is_video = False
+                is_image = False
                 ext = os.path.splitext(file_name)[1].lower()
-                if ext in ['.mp4', '.mkv', '.avi', '.mov', '.flv', '.webm', '.m4v']:
+                
+                if ext in ['.mp4', '.mkv', '.avi', '.mov', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.wmv']:
                     is_video = True
+                elif ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp']:
+                    is_image = True
                 
                 try:
                     if is_video:
@@ -240,6 +244,15 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
                          
                          if thumb_path and os.path.exists(thumb_path):
                              os.remove(thumb_path)
+                             
+                    elif is_image:
+                         await client.send_photo(
+                            chat_id=message.chat.id,
+                            photo=extracted_file_path,
+                            caption=f"🖼 `{relative_path}`",
+                            progress=progress_for_pyrogram,
+                            progress_args=("⬆️ Uploading Image...", download_message, start, task_key, active_tasks[task_key]['cancel_id'])
+                        )
                     else:
                         await client.send_document(
                             chat_id=message.chat.id,
@@ -260,6 +273,12 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
                                 video=extracted_file_path,
                                 caption=f"🎥 `{relative_path}`",
                                 supports_streaming=True
+                            )
+                        elif is_image:
+                             await client.send_photo(
+                                chat_id=message.chat.id,
+                                photo=extracted_file_path,
+                                caption=f"🖼 `{relative_path}`"
                             )
                         else:
                             await client.send_document(
