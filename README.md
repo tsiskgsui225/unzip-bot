@@ -15,7 +15,7 @@ A high-performance Telegram bot to extract various archive formats (`.zip`, `.ra
 Update your system and install Python 3, Git, and FFmpeg (required for video processing).
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install python3 python3-pip git ffmpeg -y
+sudo apt install python3 python3-pip git ffmpeg p7zip-full p7zip-rar unrar -y
 ```
 
 ### 2. Clone the Repository
