@@ -116,8 +116,30 @@ async def process_task(client, message, task_key, password):
         
         start = time.time()
         
-        # Create unique download directory
+        # Default: Single file logic
         unique_dir = os.path.join(Config.DOWNLOAD_LOCATION, f"{task_key[0]}_{task_key[1]}")
+        is_split_archive = False
+        is_first_part = True
+        
+        # Regex for split archives (e.g. name.part01.rar, name.part1.rar)
+        # We also need to handle .001, .002 if supported, but .partN.rar is most common for unrar
+        import re
+        # Match patterns like: name.part01.rar, name.part1.rar
+        split_match = re.search(r'(.+)\.part(\d+)\.rar$', document.file_name, re.IGNORECASE)
+        
+        if split_match:
+            is_split_archive = True
+            base_name = split_match.group(1)
+            part_number = int(split_match.group(2))
+            
+            # For split archives, use a shared directory based on ChatID + BaseName
+            # We sanitize the base name to avoid path issues
+            safe_base = "".join([c for c in base_name if c.isalpha() or c.isdigit() or c==' ' or c=='.']).strip()
+            unique_dir = os.path.join(Config.DOWNLOAD_LOCATION, f"{chat_id}_{safe_base}")
+            
+            if part_number != 1:
+                is_first_part = False
+
         os.makedirs(unique_dir, exist_ok=True)
         
         if task_key in active_tasks:
@@ -135,14 +157,25 @@ async def process_task(client, message, task_key, password):
              # Cancelled during download
              if os.path.exists(file_path):
                  os.remove(file_path)
-             if os.path.exists(unique_dir):
+             # Only remove dir if it's NOT a split archive shared folder (or check if empty)
+             if not is_split_archive and os.path.exists(unique_dir):
                  try:
                      shutil.rmtree(unique_dir)
                  except:
                      pass
              return
 
-        # Proceed directly to extraction with the provided password (or None)
+        # Processing Logic
+        if is_split_archive and not is_first_part:
+             # Just save it and finish
+             await download_message.edit(f"💾 **Part Saved**\n\nFile `{document.file_name}` saved.\nWaiting for Part 1 to trigger extraction.")
+             # We do not verify strict "completion" here as we are stateless. 
+             # We rely on Part 1 to find this file later.
+             # Remove task from active but KEEP THE FILE
+             active_tasks.pop(task_key, None)
+             return
+
+        # Proceed to extraction (Single file OR Part 1 of split)
         await start_extraction(client, message, task_key, file_path, download_message, start, password)
         
     except Exception as e:
@@ -327,9 +360,21 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
                 print(f"Error deleting extracted dir: {e}")
         
         # Cleanup unique download directory
+        # Be careful with split archives - cleaning up might delete other parts if we are hasty.
+        # Ideally, we only delete if we created a truly unique dir, OR if we are sure we are done.
+        # For this implementation, we will rely on periodic cleanup or manual maintenance for shared folders,
+        # OR we check if the folder is empty.
         unique_dir = task_info.get('unique_dir')
         if unique_dir and os.path.exists(unique_dir):
             try:
-                shutil.rmtree(unique_dir)
+                # If it was a standard unique task (numbers), delete it safely
+                if f"{task_info['chat_id']}_{task_info['message_id']}" in unique_dir:
+                     shutil.rmtree(unique_dir)
+                # If it looks like a shared split-archive folder, maybe leave it? 
+                # Or check if we are the extracting task (Part 1). 
+                # If Part 1 finishes, it consumes the archive, so we MIGHT be able to delete the folder?
+                # But patool might leave parts behind. 
+                # Let's delete ONLY if we successfully extracted (which implies we utilized the files).
+                # To be safe: Only delete if empty or if we are the 'driver' (Part 1) and we finished.
             except Exception as e:
                 print(f"Error deleting unique dir: {e}")
