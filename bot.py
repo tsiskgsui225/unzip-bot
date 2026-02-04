@@ -5,6 +5,12 @@ asyncio.set_event_loop(loop)
 
 from pyrogram import idle, Client
 from Unzip.config import Config
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+# Suppress pyrogram's flood wait info logs (only show warnings/errors)
+logging.getLogger("pyrogram").setLevel(logging.WARNING)
 
 app = Client(
     "unzip_bot",
