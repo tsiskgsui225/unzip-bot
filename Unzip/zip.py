@@ -298,10 +298,19 @@ async def extract_and_send_files(client, message, file_path, extract_dir, downlo
         seconds = int(time_taken % 60)
         time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
         
-        await download_message.edit(
-            f"✅ **Upload Completed**\n\n"
-            f"📂 **Total Files**: `{files_count}`\n"
-            f"⏱ **Time Taken**: `{time_str}`"
+        # Delete the progress message
+        try:
+            await download_message.delete()
+        except:
+            pass
+            
+        # Send new summary message
+        await client.send_message(
+            chat_id=message.chat.id,
+            text=f"**✨ Extraction Finished**\n\n"
+                 f"📂 **Files Uploaded:** `{files_count}`\n"
+                 f"⏳ **Time Elapsed:** `{time_str}`\n\n"
+                 f"✅ **Status:** `Completed Successfully`"
         )
 
     except Exception as e:
